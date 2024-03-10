@@ -1,7 +1,7 @@
 import pandas as pd
 import polars as pl
 import numpy as np
-from typing import List, Union
+from typing import List, Union, Self
 from polars import ColumnNotFoundError
 import warnings
 
@@ -28,7 +28,7 @@ class FeedTransformation:
         export_csv(path:str): Export feed to csv
     """
 
-    def __init__(self, feed: pl.DataFrame):
+    def __init__(self, feed: pl.DataFrame) -> None:
         """
         Parameters:
             feed (pl.DataFrame): A polars DataFrame
@@ -43,7 +43,7 @@ class FeedTransformation:
         self.feed = feed
         self.current_metadata = None
 
-    def rename_cols(self, rename_dict: dict):
+    def rename_cols(self, rename_dict: dict) -> Self:
         """
         Rename columns of the feed
 
@@ -59,7 +59,7 @@ class FeedTransformation:
         self.feed = self.feed.rename(rename_dict)
         return self
 
-    def format_cols(self):
+    def format_cols(self) -> Self:
         """
         Format columns of the feed
 
@@ -77,7 +77,7 @@ class FeedTransformation:
     def filter_products(self, col: str, filter_dict: dict):
         pass
 
-    def create_metadata(self, cols: list, meta_name: str = "metadata"):
+    def create_metadata(self, cols: list, meta_name: str = "metadata") -> Self:
         """
         Create metadata column as a struct of the columns in cols
 
@@ -107,7 +107,7 @@ class FeedTransformation:
 
     def all_combinations_metadata(
         self, cols: list, on_col: Union[str, List[str]], meta_name: str = "metadata"
-    ):
+    ) -> Self:
         """
         Create metadata column as a struct of the columns in cols for all combinations of on_col
 
@@ -129,11 +129,6 @@ class FeedTransformation:
                 f"Column {meta_name} already exists in feed. It will be overwritten"
             )
 
-        if self.current_metadata:
-            drop_old_metadata = self.current_metadata
-        else:
-            drop_old_metadata = None
-
         self.current_metadata = meta_name
         comb_metadata = (
             self.feed.with_columns(pl.struct(cols).alias(meta_name))
@@ -143,11 +138,14 @@ class FeedTransformation:
         )
         self.feed = self.feed.join(comb_metadata, on=on_col, how="left")
 
-        if drop_old_metadata:
-            self.feed = self.feed.drop(drop_old_metadata)
+        if self.current_metadata:
+            self.feed = self.feed.drop(self.current_metadata)
+        self.current_metadata = meta_name
         return self
 
-    def group_metadata(self, group_cols: Union[List[str], str], order: bool = False):
+    def group_metadata(
+        self, group_cols: Union[List[str], str], order: bool = False
+    ) -> Self:
         """
         Group metadata column by group_cols and keep the first value of the other columns
 
@@ -178,7 +176,7 @@ class FeedTransformation:
 
     def rename_column_value(
         self, col: str, old: str, new: str, regex=False, ow: str = None
-    ):
+    ) -> Self:
         """
         Rename column value from old to new in column col
 
@@ -212,7 +210,7 @@ class FeedTransformation:
             )
         return self
 
-    def export_json(self, path: str, finalize: bool = True):
+    def export_json(self, path: str, finalize: bool = True) -> Self | None:
         """
         Export feed to json
 
@@ -229,7 +227,7 @@ class FeedTransformation:
 
         return self
 
-    def export_csv(self, path: str, finalize: bool = False):
+    def export_csv(self, path: str, finalize: bool = False) -> Self | None:
         """
         Export feed to csv
 
