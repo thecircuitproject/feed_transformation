@@ -5,12 +5,13 @@ from typing import List, Union
 from polars import ColumnNotFoundError
 import warnings
 
+
 class FeedTransformation:
     """
     This class is used to transform a feed.
 
     To visualize the dataframe, call the feed attribute after each method.
-    
+
     Attributes:
         feed (pl.DataFrame): A polars DataFrame
         current_metadata (str): The name of the current metadata column
@@ -26,7 +27,8 @@ class FeedTransformation:
         export_json(path:str): Export feed to json
         export_csv(path:str): Export feed to csv
     """
-    def __init__(self, feed:pl.DataFrame):
+
+    def __init__(self, feed: pl.DataFrame):
         """
         Parameters:
             feed (pl.DataFrame): A polars DataFrame
@@ -40,7 +42,8 @@ class FeedTransformation:
 
         self.feed = feed
         self.current_metadata = None
-    def rename_cols(self, rename_dict:dict):
+
+    def rename_cols(self, rename_dict: dict):
         """
         Rename columns of the feed
 
@@ -52,9 +55,10 @@ class FeedTransformation:
         """
         if not isinstance(rename_dict, dict):
             raise TypeError("rename_dict must be a dictionary")
-        
+
         self.feed = self.feed.rename(rename_dict)
         return self
+
     def format_cols(self):
         """
         Format columns of the feed
@@ -66,12 +70,14 @@ class FeedTransformation:
             self
         """
         self.feed = self.feed.select(
-                            pl.all().map_alias(lambda col: col.strip().lower().replace(" ","_"))
-                        )
+            pl.all().map_alias(lambda col: col.strip().lower().replace(" ", "_"))
+        )
         return self
-    def filter_products(self, col:str, filter_dict:dict):
+
+    def filter_products(self, col: str, filter_dict: dict):
         pass
-    def create_metadata(self, cols:list,meta_name:str='metadata'):
+
+    def create_metadata(self, cols: list, meta_name: str = "metadata"):
         """
         Create metadata column as a struct of the columns in cols
 
@@ -86,24 +92,22 @@ class FeedTransformation:
             self.feed.select(pl.col(cols))
         except ColumnNotFoundError:
             raise ColumnNotFoundError("One or more columns in cols not found in feed")
-        
+
         if meta_name in self.feed.columns:
-            warnings.warn(f"Column {meta_name} already exists in feed. It will be overwritten")
+            warnings.warn(
+                f"Column {meta_name} already exists in feed. It will be overwritten"
+            )
+
+        self.feed = self.feed.with_columns(pl.struct(cols).alias(meta_name))
 
         if self.current_metadata:
-            drop_old_metadata = self.current_metadata
-        else:
-            drop_old_metadata = None
-        
+            self.feed = self.feed.drop(self.current_metadata)
         self.current_metadata = meta_name
-        self.feed = (self.feed
-                     .with_columns(pl.struct(cols).alias(meta_name))
-                    )
-        if drop_old_metadata:
-            self.feed = self.feed.drop(drop_old_metadata)
         return self
-    
-    def all_combinations_metadata(self, cols:list, on_col:Union[str, List[str]], meta_name:str='metadata'):
+
+    def all_combinations_metadata(
+        self, cols: list, on_col: Union[str, List[str]], meta_name: str = "metadata"
+    ):
         """
         Create metadata column as a struct of the columns in cols for all combinations of on_col
 
@@ -119,9 +123,11 @@ class FeedTransformation:
             self.feed.select(pl.col(cols))
         except ColumnNotFoundError:
             raise ColumnNotFoundError("One or more columns in cols not found in feed")
-        
+
         if meta_name in self.feed.columns:
-            warnings.warn(f"Column {meta_name} already exists in feed. It will be overwritten")
+            warnings.warn(
+                f"Column {meta_name} already exists in feed. It will be overwritten"
+            )
 
         if self.current_metadata:
             drop_old_metadata = self.current_metadata
@@ -129,22 +135,19 @@ class FeedTransformation:
             drop_old_metadata = None
 
         self.current_metadata = meta_name
-        comb_metadata = (self.feed
-                        .with_columns(pl.struct(cols).alias(meta_name))
-                        .select(pl.col(meta_name, on_col))
-                        .groupby(on_col)
-                        .agg(pl.col(meta_name))
-                        )
-        self.feed = (self.feed
-                     .join(comb_metadata, on=on_col, how='left')
-                    )
-        
+        comb_metadata = (
+            self.feed.with_columns(pl.struct(cols).alias(meta_name))
+            .select(pl.col(meta_name, on_col))
+            .groupby(on_col)
+            .agg(pl.col(meta_name))
+        )
+        self.feed = self.feed.join(comb_metadata, on=on_col, how="left")
+
         if drop_old_metadata:
             self.feed = self.feed.drop(drop_old_metadata)
         return self
-        
 
-    def group_metadata(self,group_cols:Union[List[str], str], order:bool=False):
+    def group_metadata(self, group_cols: Union[List[str], str], order: bool = False):
         """
         Group metadata column by group_cols and keep the first value of the other columns
 
@@ -159,18 +162,23 @@ class FeedTransformation:
             self.feed.select(pl.col(group_cols))
         except ColumnNotFoundError:
             raise ColumnNotFoundError("One or more columns in cols not found in feed")
-        
+
         if self.current_metadata is None:
             raise ValueError("Metadata column not found. Use create_metadata() first")
 
-
-        cols = [col for col in self.feed.columns if col not in group_cols and col != self.current_metadata]
-        self.feed = (self.feed
-                     .groupby(group_cols, maintain_order=order)
-                     .agg(pl.col(cols).first(), pl.col(self.current_metadata))
-                    )
+        cols = [
+            col
+            for col in self.feed.columns
+            if col not in group_cols and col != self.current_metadata
+        ]
+        self.feed = self.feed.groupby(group_cols, maintain_order=order).agg(
+            pl.col(cols).first(), pl.col(self.current_metadata)
+        )
         return self
-    def rename_column_value(self, col:str, old:str, new:str, regex=False, ow:str=None):
+
+    def rename_column_value(
+        self, col: str, old: str, new: str, regex=False, ow: str = None
+    ):
         """
         Rename column value from old to new in column col
 
@@ -180,7 +188,7 @@ class FeedTransformation:
             new (str): The new value
             regex (bool): Whether to use regex
             ow (str): The value to replace with if old is not found
-        
+
         Returns:
             self
         """
@@ -188,26 +196,23 @@ class FeedTransformation:
             self.feed.select(pl.col(col))
         except ColumnNotFoundError:
             raise ColumnNotFoundError(f"Column {col} not found in feed")
-        
+
         if ow is None:
             ow = old
             warnings.warn(f"ow not specified. Using old value {old} as ow")
 
         if regex:
-            self.feed = (self.feed
-                         .with_columns(
-                            pl.col(col).str.replace(rf"{old}", new))
-                        )
+            self.feed = self.feed.with_columns(pl.col(col).str.replace(rf"{old}", new))
         else:
-            self.feed = (self.feed
-                         .with_columns(
-                            pl.when(pl.col(col) == old)
-                                .then(pl.lit(new))
-                                .otherwise(pl.lit(ow)).alias(col))
-                        )
+            self.feed = self.feed.with_columns(
+                pl.when(pl.col(col) == old)
+                .then(pl.lit(new))
+                .otherwise(pl.lit(ow))
+                .alias(col)
+            )
         return self
-    
-    def export_json(self, path:str, finalize:bool=False):
+
+    def export_json(self, path: str, finalize: bool = True):
         """
         Export feed to json
 
@@ -217,14 +222,14 @@ class FeedTransformation:
         Returns:
             self
         """
-        self.feed.write_json(path, row_oriented=True)
+        self.feed.write_json(path, row_oriented=True, pretty=True)
 
         if finalize:
             return None
-        
+
         return self
-    
-    def export_csv(self, path:str, finalize:bool=False):
+
+    def export_csv(self, path: str, finalize: bool = False):
         """
         Export feed to csv
 
