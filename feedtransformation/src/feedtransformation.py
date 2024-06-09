@@ -4,7 +4,7 @@ from polars import ColumnNotFoundError
 import warnings
 
 
-def rename_cols(feed: pl.DataFrame, rename_dict: dict) -> pl.DataFrame:
+def rename_cols(feed: pl.DataFrame, **kwargs) -> pl.DataFrame:
     """
     Rename columns of the feed
 
@@ -14,10 +14,10 @@ def rename_cols(feed: pl.DataFrame, rename_dict: dict) -> pl.DataFrame:
     Returns:
         self
     """
-    if not isinstance(rename_dict, dict):
+    if not isinstance(kwargs, dict):
         raise TypeError("rename_dict must be a dictionary")
 
-    return feed.rename(rename_dict)
+    return feed.rename(kwargs)
 
 
 def format_cols(feed: pl.DataFrame) -> pl.DataFrame:
@@ -35,12 +35,8 @@ def format_cols(feed: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def filter_products(feed: pl.DataFrame, col: str, filter_dict: dict):
-    pass
-
-
 def create_metadata(
-    feed: pl.DataFrame, cols: list, meta_name: str = "metadata"
+    feed: pl.DataFrame, cols: list, meta_name: str = "metadata", exclude: str = None
 ) -> pl.DataFrame:
     """
     Create metadata column as a struct of the columns in cols
@@ -55,38 +51,32 @@ def create_metadata(
     _validate_existing_columns(feed, cols)
 
     _overwrite_metadata(feed, meta_name)
-    return feed.with_columns(pl.struct(cols).alias(meta_name))
+
+    feed = feed.with_columns(pl.struct(cols).alias(meta_name))
+
+    if exclude:
+        feed = feed.select(pl.exclude(exclude))
+
+    return feed
 
 
 def all_combinations_metadata(
-    feed: pl.DataFrame,
-    cols: list,
-    on_col: Union[str, List[str]],
-    meta_name: str = "metadata",
+    feed: pl.DataFrame, col: str, over_col: Union[str, List[str]]
 ) -> pl.DataFrame:
     """
     Create metadata column as a struct of the columns in cols for all combinations of on_col
 
     Parameters:
-        cols (list): A list of columns to be included in the metadata column
+        col (list): A list of columns to be included in the metadata column
         on_col (str or list): The column(s) to group by
         col_name (str): The name of the metadata column
 
     Returns:
         self
     """
-    _validate_existing_columns(feed, cols)
+    _validate_existing_columns(feed, col)
 
-    _overwrite_metadata(feed, meta_name)
-
-    current_metadata = meta_name
-    comb_metadata = (
-        feed.with_columns(pl.struct(cols).alias(meta_name))
-        .select(pl.col(meta_name, on_col))
-        .group_by(on_col)
-        .agg(pl.col(meta_name))
-    )
-    return feed.join(comb_metadata, on=on_col, how="left")
+    return feed.with_columns(pl.col(col).over(over_col, mapping_strategy="join"))
 
 
 def group_metadata(
